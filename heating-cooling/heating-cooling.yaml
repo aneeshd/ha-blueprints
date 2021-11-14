@@ -1,0 +1,573 @@
+blueprint:
+  name: Heating/Cooling Control and Window Sensor
+  description: Control your heating and cooling with options for group home, if temp is below
+    a specific value, set temp, and heating between specific times.
+  domain: automation
+  input:
+    state:
+      name: Scheduled State
+      description: The desired state.
+      selector:
+        entity:
+          domain: sensor
+    thermostat:
+      name: Climate Device
+      description: The climate device to use.
+      selector:
+        entity:
+          domain: climate
+    manual_control:
+      name: Manual Temperature Control
+      description: Check if thermostat control should not be automated
+      selector:
+        entity:
+          domain: input_boolean
+    vacation_mode:
+      name: Vacation mode control
+      description: Toggle control for vacation mode
+      selector:
+        entity:
+          domain: input_boolean
+    # window_sensor_1:
+    #   name: Door or Window Sensor
+    #   description: Check if window or door is open
+    #   selector:
+    #     entity:
+    #       domain: binary_sensor
+    #       device_class: opening
+
+    groupname:
+      name: Person Group
+      description: The group of people that have to be home.
+      default: []
+      selector:
+        entity:
+          domain: group
+    group_presence:
+      name: Group Presence
+      description: Heat only if Person of Group was present in a given amount of time
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 60
+          step: 1
+          mode: slider
+
+    min_temp_heat:
+      name: Minimum outdoor temperature to activate heating
+      description: If outdoor temperature is below this value and someone is home, it turns
+        heating on.
+      default: 14
+      selector:
+        number:
+          min: 12.0
+          max: 18.0
+          step: 0.5
+          mode: slider
+    max_temp_cool:
+      name: Maximum outdoor temperature to activate cooling
+      description: If outdoor temperature is above this value and someone is home, it turns
+        AC on.
+      default: 24
+      selector:
+        number:
+          min: 18.0
+          max: 28.0
+          step: 0.5
+          mode: slider
+
+    temp_normal_heat:
+      name: "Normal: Heating Temperature Target"
+      description: Target temperature when in normal mode
+      default: 18
+      selector:
+        number:
+          min: 14.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+    temp_toasty_heat:
+      name: "Toasty: Heating Temperature Target"
+      description: Target temperature when in toasty mode
+      default: 20
+      selector:
+        number:
+          min: 14.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+    temp_energy_heat:
+      name: Energy Saving Temperature Target (Winter)
+      description: When away or doors open, keep the Energy Saving Temperature
+      default: 16
+      selector:
+        number:
+          min: 14.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+    temp_sleep_heat:
+      name: "Sleep: Heating Temperature Target"
+      description: Target temperature when in sleep mode
+      default: 16
+      selector:
+        number:
+          min: 14.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+
+    temp_normal_cool:
+      name: "Normal: Cooling Temperature Target"
+      description: Target temperature when in normal mode
+      default: 22
+      selector:
+        number:
+          min: 18.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+    temp_energy_cool:
+      name: Energy Saving Temperature Target (Summer)
+      description: When away or doors open, keep the Energy Saving Temperature
+      default: 24
+      selector:
+        number:
+          min: 18.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+    temp_sleep_cool:
+      name: "Sleep: Cooling Temperature Target"
+      description: Target temperature when in sleep mode
+      default: 20
+      selector:
+        number:
+          min: 18.0
+          max: 25.0
+          step: 0.5
+          mode: slider
+
+    vacation_high:
+      name: High temperature limit (vacation mode)
+      description: When on vacation, turn on AC if temperature exceeds this setting
+      default: 26
+      selector:
+        number:
+          min: 20.0
+          max: 28.0
+          step: 0.5
+          mode: slider
+    vacation_low:
+      name: Low temperature limit (vacation mode)
+      description: When on vacation, turn on heating if temperature goes below this setting
+      default: 16
+      selector:
+        number:
+          min: 10.0
+          max: 20.0
+          step: 0.5
+          mode: slider
+
+variables:
+  temp_normal_heat: !input 'temp_normal_heat'
+  temp_toasty_heat: !input 'temp_toasty_heat'
+  temp_sleep_heat: !input 'temp_sleep_heat'
+  temp_energy_heat: !input 'temp_energy_heat'
+
+  temp_normal_cool: !input 'temp_normal_cool'
+  temp_sleep_cool: !input 'temp_sleep_cool'
+  temp_energy_cool: !input 'temp_energy_cool'
+
+mode: single
+
+trigger:
+- platform: homeassistant
+  event: start
+- platform: event
+  event_type: automation_reloaded
+#- platform: time_pattern
+#  minutes: /1
+- platform: state
+  entity_id:
+    - !input 'groupname'
+    - !input 'state'
+    - !input 'vacation_mode'
+    - !input 'manual_control'
+- platform: numeric_state
+  entity_id: weather.home
+  attribute: temperature
+  above: !input 'min_temp_heat'
+- platform: numeric_state
+  entity_id: weather.home
+  attribute: temperature
+  below: !input 'min_temp_heat'
+- platform: numeric_state
+  entity_id: weather.home
+  attribute: temperature
+  above: !input 'max_temp_cool'
+- platform: numeric_state
+  entity_id: weather.home
+  attribute: temperature
+  below: !input 'max_temp_cool'
+
+action:
+- choose:
+
+  # automation is disabled
+  - conditions:
+    - condition: state
+      entity_id: !input 'manual_control'
+      state: 'on'
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+
+  # vacation mode
+  # set the thermostat to a range that's not too hot, not too cold
+  - conditions:
+    - condition: state
+      entity_id: !input 'vacation_mode'
+      state: 'on'
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        # set the vacation mode temperature range; both heating and cooling are allowed
+        entity_id: !input 'thermostat'
+        hvac_mode: heat_cool
+        target_temp_high: '{{ vacation_high }}'
+        target_temp_low: '{{ vacation_low }}'
+
+  # main heating rule - IF:
+  # - outdoor temp is below 'min_temp_heat'; and
+  # - after time_start; and
+  # - window sensor is off (window is closed??); and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'temp_normal_heat'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      below: !input 'min_temp_heat'
+    - condition: state
+      entity_id: !input 'state'
+      state: normal
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: heat
+        temperature: '{{ temp_normal_heat }}'
+
+  # sleep heating rule - IF:
+  # - outdoor temp is below 'min_temp_heat'; and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'set_temp_heat'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      below: !input 'min_temp_heat'
+    - condition: state
+      entity_id: !input 'state'
+      state: sleep
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: heat
+        temperature: '{{ temp_sleep_heat }}'
+
+  # extra toasty heating rule - IF:
+  # - outdoor temp is below 'min_temp_heat'; and
+  # - window sensor is off (window is closed??); and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'temp_toasty_heat'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      below: !input 'min_temp_heat'
+    - condition: state
+      entity_id: !input 'state'
+      state: toasty
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: heat
+        temperature: '{{ temp_toasty_heat }}'
+
+  # explicit energy heating rule - IF:
+  # - outdoor temp is below 'min_temp_heat'; and
+  # - window sensor is off (window is closed??); and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'temp_energy_heat'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      below: !input 'min_temp_heat'
+    - condition: state
+      entity_id: !input 'state'
+      state: energy-saving
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: heat
+        temperature: '{{ temp_energy_heat }}'
+
+  # normal cooling rule - IF:
+  # - outdoor temp is above 'max_temp_cool'; and
+  # - window sensor is off (window is closed??); and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'temp_normal_cool'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      above: !input 'max_temp_cool'
+    - condition: state
+      entity_id: !input 'state'
+      state: normal
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: cool
+        temperature: '{{ temp_normal_cool }}'
+
+  # sleep cooling rule - IF:
+  # - outdoor temp is above 'max_temp_cool'; and
+  # - window sensor is off (window is closed??); and
+  # - someone is at home - TODO not not_home for 30 minutes...
+  # THEN: turn on thermostat and set target temperature to 'temp_sleep_cool'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      above: !input 'max_temp_cool'
+    - condition: state
+      entity_id: !input 'state'
+      state: sleep
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: !input 'groupname'
+        for:
+          hours: 0
+          minutes: !input 'group_presence'
+          seconds: 0
+        state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: cool
+        temperature: '{{ temp_sleep_cool }}'
+
+  # # windows open while it's cold outside
+  # # 15 minute grace period (hard-coded for now)
+  # # never turn off the heat, this is Canada - just crank down the thermostat
+  # # TODO send a notification
+  # - conditions:
+  #   - condition: numeric_state
+  #     entity_id: weather.home
+  #     attribute: temperature
+  #     below: !input 'min_temp_heat'
+  #   # - condition: state
+  #   #   entity_id: !input 'window_sensor_1'
+  #   #   state: 'on'
+  #   #   for: "00:15:00"
+  #   sequence:
+  #   - service: climate.set_temperature
+  #     data:
+  #       entity_id: !input 'thermostat'
+  #       hvac_mode: heat
+  #       temperature: '{{ energy_temp_heat/2.0 }}'
+
+  # # windows open while it's warm outside
+  # # 15 minute grace period (hard-coded for now)
+  # # put AC at energy saving temperature
+  # # TODO send a notification
+  # - conditions:
+  #   - condition: numeric_state
+  #     entity_id: weather.home
+  #     attribute: temperature
+  #     below: !input 'min_temp_heat'
+  #   # - condition: state
+  #   #   entity_id: !input 'window_sensor_1'
+  #   #   state: 'on'
+  #   #   for: "00:15:00"
+  #   sequence:
+  #   - service: climate.set_hvac_mode
+  #     data:
+  #       hvac_mode: cool
+  #       temperature: '{{ energy_temp_cool }}'
+  #       entity_id: !input 'thermostat'
+
+  # energy saving heating rule - IF:
+  # - outdoor temp is below 'min_temp_heat'; and
+  # - no one is at home / has been at home for 'group_presence' minutes
+  # THEN: turn on thermostat and set target temperature to 'temp_energy_heat'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      below: !input 'min_temp_heat'
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: state
+      entity_id: !input 'groupname'
+      for:
+        hours: 0
+        minutes: !input 'group_presence'
+        seconds: 0
+      state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: heat
+        temperature: '{{ temp_energy_heat }}'
+
+  # energy saving cooling rule - IF:
+  # - outdoor temp is above 'max_temp_cool'; and
+  # - no one is at home / has been at home for 'group_presence' minutes
+  # THEN: turn on thermostat and set target temperature to 'energy_temp_cool'
+  - conditions:
+    - condition: numeric_state
+      entity_id: weather.home
+      attribute: temperature
+      above: !input 'max_temp_cool'
+    # - condition: state
+    #   entity_id: !input 'window_sensor_1'
+    #   state: 'off'
+    - condition: state
+      entity_id: !input 'groupname'
+      for:
+        hours: 0
+        minutes: !input 'group_presence'
+        seconds: 0
+      state: not_home
+    sequence:
+    - service: climate.set_preset_mode
+      data:
+        entity_id: !input 'thermostat'
+        preset_mode: none
+    - service: climate.set_temperature
+      data:
+        entity_id: !input 'thermostat'
+        hvac_mode: cool
+        temperature: '{{ temp_energy_cool }}'
+
+  # safe default - outside temperature is comfortable enough
+  # but at least the house won't break
+  default:
+  - service: climate.set_preset_mode
+    data:
+      entity_id: !input 'thermostat'
+      preset_mode: Energy heat
+  - service: climate.set_temperature
+    data:
+      entity_id: !input 'thermostat'
+      hvac_mode: heat_cool
+      target_temp_high: '{{ vacation_high }}'
+      target_temp_low: '{{ vacation_low }}'
